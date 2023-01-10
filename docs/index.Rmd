@@ -10,7 +10,6 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-dev.off()
 rm(list=ls())
 cat("\014") 
 
@@ -22,7 +21,7 @@ library(forcats)
 library(lme4)
 library(gridExtra)
 library(knitr)
-library(kableExtra)
+#library(kableExtra)
 ```
 
 ## Analyzing and visualizing PGA tour data from 2019-2022 
@@ -100,7 +99,7 @@ ggplot(app, aes(x=Freq))+
   labs(title="Player Tournament Appearances (2019-2022)",x="Frequency", y = "Count")+
   theme_minimal()
 ```
-
+Brian Stuard appeared in the most PGA tournament (88) from 2019-2022. The average number of tournaments played in was 32.40. Many players performed in fewer than 20 tournaments.  
 
 ### 2. Who won the most tournaments since 2019?
 ```{r, warning=FALSE}
@@ -115,6 +114,8 @@ ggplot(winners, aes(x = fct_infreq(Player_initial_last)))+
   theme_minimal()+
   theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))
 ```
+
+Justin Thomas and Patrick Cantlay tied for the most tournament wins (5) in this time period. 
 
 
 ### 3. Examining max streak DKP, FDP and SDP (fantasy golf / sports betting data)
@@ -212,6 +213,8 @@ corrplot(res2, type = "lower", order = "hclust",
          tl.col = "black", tl.srt = 45)
 ```
 
+Unsurprisingly, as the total hole par increases, so do the number of strokes. Also unsurprisingly, players who made the cut had fewer stokes per round. Total number of strokes was positively correlated with each strokes gained category and negatively correlated with final position. Only players that made the cut recieved a final position ranking. For players that made the cut, each category of strokes gained was negatively related to final position. Additionally, the strokes gained categories were uncorrelated with each other indicating that they are independence. For example, strokes gained putting was not related to strokes gained on the approach. So, if a golfer is struggling in one area, that may be independent from performance in other areas.      
+
 #### 4b. Strokes gained predicting position
 ```{r, warning=FALSE}
 pga$playerid<-as.factor(pga$`player id`)
@@ -220,3 +223,4 @@ pga$tourid<-as.factor(pga$`tournament id`)
 m1<- lmer(pos ~ sg_ott+sg_app+sg_arg+sg_putt+(1|playerid:tourid), data=pga)
 summary(m1)
 ```
+After accounting for clustering within player and tournament, all categories of of strokes gained predicted final position in players that made the cut.  
