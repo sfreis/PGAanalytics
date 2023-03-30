@@ -1,7 +1,7 @@
 ---
 title: "PGA Tour Data Analysis"
 author: "Sam Freis"
-date: "1/9/2023"
+date: "03/29/2023"
 output:
   html_document: default
   pdf_document: default
@@ -21,25 +21,26 @@ library(forcats)
 library(lme4)
 library(gridExtra)
 library(knitr)
+library(performance)
 #library(kableExtra)
 ```
 
-## Analyzing and visualizing PGA tour data from 2019-2022 
+## Analyzing and visualizing PGA tour data from 2015-2022 
 
 #### Data Import ####
 ```{r}
 # data pulled from: https://www.advancedsportsanalytics.com/pga-overview
 
 # Reading in Data
-pga <- read_csv("ASA All PGA Raw Data - Tourn Level.csv", na = c("", "NA", "999"))
+pga <- read_csv("ASA All PGA Raw Data - Tourn Level2015.csv", na = c("", "NA", "999"))
 ```
 
 #### Basic data cleaning and looking at descriptives 
 ```{r, warning=FALSE}
 # look at var names and info
-names(pga)
-str(pga)
-head(pga)
+#names(pga)
+#str(pga)
+#head(pga)
 
 # drop the empty variables
 pga$`Unnamed: 2`<-NULL
@@ -74,13 +75,22 @@ numVARS<-c("hole_par",
 )
 numITEMS<-pga[numVARS]
 
+numITEMS %>% 
+  summarise(across(everything(), ~ sum(is.na(.x))))
+
+pga<-pga %>%
+  filter_at(vars(sg_putt, sg_arg, sg_app, sg_ott, sg_t2g, sg_total), all_vars(!is.na(.)))
+
+numITEMS<-numITEMS %>%
+  filter_at(vars(sg_putt, sg_arg, sg_app, sg_ott, sg_t2g, sg_total), all_vars(!is.na(.)))
+
 kable(describe(numITEMS), 
       format='markdown', 
       digits=3)
 ```
 
 ## Research Questions: 
-### 1. Who appeared in the most tournaments since 2019?
+### 1. Who appeared in the most tournaments since 2015?
 #### 1a. What is the average number of tournament appearances? 
 
 ```{r, warning=FALSE}
@@ -94,15 +104,16 @@ kable(describe(app$Freq), format='markdown',
 
 ggplot(app, aes(x=Freq))+
   geom_histogram(color="#FFFFFF", fill="#003C80")+
-  scale_x_continuous(breaks = seq(0, 90, by = 10))+
+  scale_x_continuous(breaks = seq(0, 200, by = 10))+
   scale_y_continuous(breaks = seq(0, 90, len = 10))+
-  labs(title="Player Tournament Appearances (2019-2022)",x="Frequency", y = "Count")+
+  labs(title="Player Tournament Appearances (2015-2022)",x="Frequency", y = "Count")+
   theme_minimal()
 ```
-Brian Stuard appeared in the most PGA tournament (88) from 2019-2022. The average number of tournaments played in was 32.40. Many players performed in fewer than 20 tournaments.  
 
-### 2. Who won the most tournaments since 2019?
-```{r, warning=FALSE}
+Brian Stuard appeared in the most PGA tournaments from 2015-2022. The average number of tournaments played in was 63. Many players performed in fewer than 20 tournaments.  
+
+### 2. Who won the most tournaments since 2015?
+```{r, message=FALSE, warning=FALSE, fig.width=12}
 winners <- pga[ which(pga$pos==1), ]
 
 wincount<-winners %>% count(Player_initial_last)
@@ -110,12 +121,35 @@ wincount<-wincount[ order(-wincount$n), ]
 
 ggplot(winners, aes(x = fct_infreq(Player_initial_last)))+
   geom_bar(color="#FFFFFF", fill="#CCA600")+
-  labs(title="Player Tournament Wins (2019-2022)",x="Player", y = "Count")+
+  labs(title="Player Tournament Wins (2015-2022)",x="Player", y = "Count")+
   theme_minimal()+
   theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))
 ```
 
-Justin Thomas and Patrick Cantlay tied for the most tournament wins (5) in this time period. 
+Dustin Johnson and Justin Thomas had the most tournament wins in this time period. 
+
+#### 2a. How have wins changed over time? 
+```{r, warning=FALSE}
+library(gghighlight)
+library(plotly)
+
+winby<-as.data.frame(table(winners$Player_initial_last, winners$season))
+
+winby <- winby %>% 
+       rename("player" = "Var1",
+              "season" = "Var2",
+              "wins" = "Freq")
+
+p2 <- winby %>% 
+  ggplot(aes(x = season, y = wins, group = player)) + 
+  labs(x= "Season", y= "Wins") + 
+  ggtitle("Tournament Wins Over Time") +
+  geom_line() + 
+  gghighlight(player == "R. McIlroy")+
+  theme_minimal()
+p2
+
+```
 
 
 ### 3. Examining max streak DKP, FDP and SDP (fantasy golf / sports betting data)
@@ -199,7 +233,9 @@ sgVARS<-c(
            "sg_putt",
            "sg_arg",
            "sg_app",
-           "sg_ott"
+           "sg_ott",
+           "sg_t2g",
+           "sg_total"
 
 )
 sgITEMS<-pga[sgVARS]
@@ -213,14 +249,87 @@ corrplot(res2, type = "lower", order = "hclust",
          tl.col = "black", tl.srt = 45)
 ```
 
-Unsurprisingly, as the total hole par increases, so do the number of strokes. Also unsurprisingly, players who made the cut had fewer stokes per round. Total number of strokes was positively correlated with each strokes gained category and negatively correlated with final position. Only players that made the cut recieved a final position ranking. For players that made the cut, each category of strokes gained was negatively related to final position. Additionally, the strokes gained categories were uncorrelated with each other indicating that they are independence. For example, strokes gained putting was not related to strokes gained on the approach. So, if a golfer is struggling in one area, that may be independent from performance in other areas.      
+Strokes gained total and tee-to-green are sums of other strokes gained categories. 
 
-#### 4b. Strokes gained predicting position
+###### 4b. Strokes gained predicting position
 ```{r, warning=FALSE}
+library(sjPlot)
 pga$playerid<-as.factor(pga$`player id`)
 pga$tourid<-as.factor(pga$`tournament id`)
 
-m1<- lmer(pos ~ sg_ott+sg_app+sg_arg+sg_putt+(1|playerid:tourid), data=pga)
-summary(m1)
+m1<- lmer(pos ~ sg_ott+sg_app+sg_arg+sg_putt+(1|playerid), data=pga)
+#summary(m1)
+tab_model(m1)
+
+#check_model(m1)
+#model_performance(m1)
 ```
-After accounting for clustering within player and tournament, all categories of of strokes gained predicted final position in players that made the cut.  
+
+The metric strokes gained was developed by Columbia business professor Mark Broadie and was a massive advancement in golf analytics: https://www8.gsb.columbia.edu/researcharchive/articles/4996. Strokes Gained measures the quality of each shot based on its starting and ending locations. So, calculations factor in the average number of shots for a golfer to get down from a given starting distance and starting lie condition and the average number of shots to get down from a given end distance and end lie condition. These average numbers are different for professional vs. amateur golfers. Negative numbers represent how many shots a golfer has lost compared to the benchmark, while positive numbers represent how many shots have been gained against said benchmark. Negative numbers highlight areas for improvement, while positive numbers indicate the golfer has performed well. 
+
+Unsurprisingly, as the total hole par increases, so do the number of strokes. Also unsurprisingly, players who made the cut had fewer stokes per round. Only players that made the cut received a final position ranking. For players that made the cut, each category of strokes gained was negatively related to final position indicating that higher strokes gained corresponded a lower position (better performance). Strokes gained putting and approaching the green were the most strongly related to worse performance. 
+
+Additionally, the strokes gained categories were uncorrelated with each other indicating that they are independent. For example, strokes gained putting was not related to strokes gained on the approach. So, if a golfer is struggling in one area, that may be independent from performance in other areas. 
+
+After accounting for clustering within player, all categories of of strokes gained statistically predicted final position in players that made the cut.   
+
+Strokes gained while putting is often what we hear about in golf coverage and what my high school golf coach always emphasized. However, among players that made tournament cuts, these results indicate that which category of strokes gained is the most impactful for overall performance may vary player to player. 
+
+Importantly, since only players that made the cut get a position, these relationships could change in the full sample. Let's take a look at strokes gained predicting performance but with making the cut (yes/no) as the outcome.   
+
+```{r, message=FALSE, warning=FALSE, fig.width=8}
+table(pga$made_cut)
+
+p1<-ggplot(pga, aes(x=made_cut, y=sg_ott, fill=made_cut)) + 
+  geom_boxplot()+
+  theme_bw()+
+  labs(y = "Stokes Gained Off the Tee", x = "")+
+  scale_fill_discrete(name = "Made Cut", labels = c("No", "Yes"))
+
+p2<-ggplot(pga, aes(x=made_cut, y=sg_app, fill=made_cut)) + 
+  geom_boxplot()+
+  theme_bw()+
+  labs(y = "Stokes Gained Approach", x = "")+
+  scale_fill_discrete(name = "Made Cut", labels = c("No", "Yes"))
+
+p3<-ggplot(pga, aes(x=made_cut, y=sg_arg, fill=made_cut)) + 
+  geom_boxplot()+
+  theme_bw()+
+  labs(y = "Stokes Gained Around the Green", x = "")+
+  scale_fill_discrete(name = "Made Cut", labels = c("No", "Yes"))
+
+p4<-ggplot(pga, aes(x=made_cut, y=sg_putt, fill=made_cut)) + 
+  geom_boxplot()+
+  theme_bw()+
+  labs(y = "Stokes Gained Putting", x = "")+
+  scale_fill_discrete(name = "Made Cut", labels = c("No", "Yes"))
+
+p5<-ggplot(pga, aes(x=made_cut, y=sg_t2g, fill=made_cut)) + 
+  geom_boxplot()+
+  theme_bw()+
+  labs(y = "Stokes Gained Tee-to-Green", x = "")+
+  scale_fill_discrete(name = "Made Cut", labels = c("No", "Yes"))
+
+p6<-ggplot(pga, aes(x=made_cut, y=sg_total, fill=made_cut)) + 
+  geom_boxplot()+
+  theme_bw()+
+  labs(y = "Stokes Gained Total", x = "")+
+  scale_fill_discrete(name = "Made Cut", labels = c("No", "Yes"))
+
+library(gridExtra)
+grid.arrange(p1, p2, p3, p4, p5, p6, nrow = 2,
+             top = "Strokes Gained by Cut"
+)
+
+quallogit <- glmer(made_cut ~ sg_ott+sg_app+sg_arg+sg_putt+(1|playerid), data = pga, family = "binomial", control = glmerControl(optimizer = "bobyqa"),
+    nAGQ = 10)
+
+print(quallogit, corr=FALSE)
+se <- sqrt(diag(vcov(quallogit)))
+(tab <- cbind(Est = fixef(quallogit), LL = fixef(quallogit) - 1.96 * se, UL = fixef(quallogit) + 1.96 *
+    se))
+
+tab_model(quallogit)
+```
+
+Similar to the restricted sample, each category of strokes gained independently statistically predicted if player performance indexed by making the tournament cut. Higher strokes gained corresponded a better chance of making the tournament. 
