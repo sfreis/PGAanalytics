@@ -16,4 +16,5 @@ library(kableExtra)
 
 Report here: https://sfreis.github.io/PGAanalytics/
 
-![pgawins](https://user-images.githubusercontent.com/54371512/226495926-4461b037-b0bc-42d6-a284-4dd3b14cc257.png)
+
+![cutbox](https://user-images.githubusercontent.com/54371512/228927036-9ac36e0e-cb86-4d20-bf4f-15ee3b835609.png)
